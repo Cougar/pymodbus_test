@@ -1,5 +1,6 @@
 import functools
 from tornado.ioloop import IOLoop
+from tornado.iostream import StreamClosedError
 
 from pymodbus230.client.asynchronous import schedulers
 from pymodbus230.client.asynchronous.tcp import AsyncModbusTCPClient
@@ -9,8 +10,8 @@ from pymodbus120.exceptions import ConnectionException, ModbusIOException
 from pymodbus120.register_read_message import ReadHoldingRegistersResponse
 
 import logging
-FORMAT = ('%(asctime)-15s %(threadName)-15s'
-          ' %(levelname)-8s %(module)-15s:%(lineno)-8s %(message)s')
+FORMAT = ('%(asctime)-15s %(levelname)-8s %(threadName)-15s'
+        '%(pathname)s:%(lineno)d %(module)s.%(funcName)s(): %(message)s')
 logging.basicConfig(format=FORMAT)
 log = logging.getLogger()
 log.setLevel(logging.WARNING)
@@ -20,6 +21,8 @@ UNIT = 0x01
 class CommonModBusRunner:
     def __init__(self, client_name, ModbusClient, register_list, timeout=3, **kwargs):
         self.client_name = client_name
+        self._ModbusClient = ModbusClient
+        self._kwargs = kwargs
         self._client = None
         self._protocol = None
         self._register = self._get_next_register(register_list)
@@ -62,18 +65,24 @@ class CommonModBusRunner:
 class ModBusRunner(CommonModBusRunner):
     def __init__(self, client_name, ModbusClient, register_list, timeout=3, **kwargs):
         super().__init__(client_name, ModbusClient, register_list, timeout, **kwargs)
-        self._protocol, future = ModbusClient(schedulers.IO_LOOP, **kwargs)
+        self._connect()
+
+    def _connect(self):
+        self._protocol, future = self._ModbusClient(schedulers.IO_LOOP, self._kwargs)
         future.add_done_callback(self._on_connect)
 
     def _send_request(self):
         register = next(self._register)
         log.debug('_send_request(%d)', register)
-        self._timeout_callback = IOLoop.current().call_later(self._timeout, self._on_timeout)
-        log.debug('+++ timeout set: %s', self._timeout_callback)
         try:
             self._client.read_holding_registers(register, 1, unit=UNIT).add_done_callback(functools.partial(self._on_done, register))
-        except tornado.iostream.StreamClosedError as ex:
-            log.error(ex)
+        except StreamClosedError as ex:
+            log.exception(ex)
+            self._connect()
+        except Exception as ex:
+            log.exception(ex)
+        self._timeout_callback = IOLoop.current().call_later(self._timeout, self._on_timeout)
+        log.debug('+++ timeout set: %s', self._timeout_callback)
 
     def _on_connect(self, future):
         log.debug('_on_connect()')
@@ -100,7 +109,7 @@ class ModBusRunner(CommonModBusRunner):
 class ModBusRunner120(CommonModBusRunner):
     def __init__(self, client_name, ModbusClient, register_list, timeout=3, **kwargs):
         super().__init__(client_name, ModbusClient, register_list, timeout, **kwargs)
-        self._client = ModbusClient(**kwargs)
+        self._client = self._ModbusClient(**kwargs)
         self.run()
 
     def _send_request(self):
@@ -110,8 +119,10 @@ class ModBusRunner120(CommonModBusRunner):
         log.debug('+++ timeout set: %s', self._timeout_callback)
         try:
             self._client.read_holding_registers(register, 1, unit=UNIT).addCallback(functools.partial(self._on_done, register))
-        except tornado.iostream.StreamClosedError as ex:
-            log.error(ex)
+        except StreamClosedError as ex:
+            log.exception(ex)
+        except Exception as ex:
+            log.exception(ex)
 
     def _on_done(self, register, f):
         log.debug('_on_done(%d)', register)
