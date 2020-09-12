@@ -2,23 +2,24 @@ import functools
 from tornado.ioloop import IOLoop
 from tornado.iostream import StreamClosedError
 
-from pymodbus230.client.asynchronous import schedulers
-from pymodbus230.client.asynchronous.tcp import AsyncModbusTCPClient
+from pymodbus.client.asynchronous import schedulers
 
-from pymodbus120_async.client import AsyncModbusSerialClient, AsyncErrorResponse
-from pymodbus120.exceptions import ConnectionException, ModbusIOException
-from pymodbus120.register_read_message import ReadHoldingRegistersResponse
+from pymodbus.client.asynchronous.tcp import AsyncModbusTCPClient
+from pymodbus.client.asynchronous.serial import AsyncModbusSerialClient
+
+from pymodbus.exceptions import ConnectionException, ModbusIOException
+from pymodbus.register_read_message import ReadHoldingRegistersResponse
 
 import logging
 FORMAT = ('%(asctime)-15s %(levelname)-8s %(threadName)-15s'
         '%(pathname)s:%(lineno)d %(module)s.%(funcName)s(): %(message)s')
 logging.basicConfig(format=FORMAT)
 log = logging.getLogger()
-log.setLevel(logging.WARNING)
+log.setLevel(logging.ERROR)
 
 UNIT = 0x01
 
-class CommonModBusRunner:
+class ModBusRunner:
     def __init__(self, client_name, ModbusClient, register_list, timeout=3, **kwargs):
         self.client_name = client_name
         self._ModbusClient = ModbusClient
@@ -28,6 +29,11 @@ class CommonModBusRunner:
         self._register = self._get_next_register(register_list)
         self._timeout = timeout
         self._timeout_callback = None
+        self._connect()
+
+    def _connect(self):
+        self._event_loop, self._future = self._ModbusClient(schedulers.IO_LOOP, **self._kwargs)
+        self._future.add_done_callback(self._on_connect)
 
     def run(self):
         self._send_request()
@@ -36,6 +42,48 @@ class CommonModBusRunner:
         while True:
             for register in register_list:
                 yield register
+
+    def _send_request(self):
+        register = next(self._register)
+        log.debug('_send_request(%d)', register)
+        try:
+            self._client.read_holding_registers(register, 1, unit=UNIT).add_done_callback(functools.partial(self._on_done, register))
+        except StreamClosedError as ex:
+            log.exception(ex)
+            self._connect()
+        except Exception as ex:
+            log.exception(ex)
+        self._timeout_callback = IOLoop.current().call_later(self._timeout, self._on_timeout)
+        log.debug('+++ timeout set: %s', self._timeout_callback)
+
+    def _on_connect(self, future):
+        log.debug('_on_connect()')
+        log.info("Client connected")
+        try:
+            res = future.result()
+            log.error("RES: %s", res)
+        except Exception as ex:
+            log.exception(ex)
+        try:
+            exp = future.exception()
+            if exp:
+                log.exception(exp)
+            else:
+                self._client = future.result()
+                self.run()
+        except Exception as ex:
+            log.exception(ex)
+
+    def _on_done(self, register, f):
+        log.debug('_on_done(%d)', register)
+        exc = f.exception()
+        if exc:
+            log.debug(exc)
+        else:
+            self._print(register, f.result())
+        log.debug('--- remove_timeout()')
+        IOLoop.current().remove_timeout(self._timeout_callback)
+        self._send_request()
 
     def _on_timeout(self):
         log.warning("%s: TIMEOUT reading registers (%s, %s)", self, self._client, self._protocol)
@@ -62,84 +110,9 @@ class CommonModBusRunner:
             self._protocol.stop()
 
 
-class ModBusRunner(CommonModBusRunner):
-    def __init__(self, client_name, ModbusClient, register_list, timeout=3, **kwargs):
-        super().__init__(client_name, ModbusClient, register_list, timeout, **kwargs)
-        self._connect()
-
-    def _connect(self):
-        self._protocol, future = self._ModbusClient(schedulers.IO_LOOP, self._kwargs)
-        future.add_done_callback(self._on_connect)
-
-    def _send_request(self):
-        register = next(self._register)
-        log.debug('_send_request(%d)', register)
-        try:
-            self._client.read_holding_registers(register, 1, unit=UNIT).add_done_callback(functools.partial(self._on_done, register))
-        except StreamClosedError as ex:
-            log.exception(ex)
-            self._connect()
-        except Exception as ex:
-            log.exception(ex)
-        self._timeout_callback = IOLoop.current().call_later(self._timeout, self._on_timeout)
-        log.debug('+++ timeout set: %s', self._timeout_callback)
-
-    def _on_connect(self, future):
-        log.debug('_on_connect()')
-        log.info("Client connected")
-        exp = future.exception()
-        if exp:
-            log.error(exp)
-        else:
-            self._client = future.result()
-            self.run()
-
-    def _on_done(self, register, f):
-        log.debug('_on_done(%d)', register)
-        exc = f.exception()
-        if exc:
-            log.debug(exc)
-        else:
-            self._print(register, f.result())
-        log.debug('--- remove_timeout()')
-        IOLoop.current().remove_timeout(self._timeout_callback)
-        self._send_request()
-
-
-class ModBusRunner120(CommonModBusRunner):
-    def __init__(self, client_name, ModbusClient, register_list, timeout=3, **kwargs):
-        super().__init__(client_name, ModbusClient, register_list, timeout, **kwargs)
-        self._client = self._ModbusClient(**kwargs)
-        self.run()
-
-    def _send_request(self):
-        register = next(self._register)
-        log.debug('_send_request(%d)', register)
-        self._timeout_callback = IOLoop.current().call_later(self._timeout, self._on_timeout)
-        log.debug('+++ timeout set: %s', self._timeout_callback)
-        try:
-            self._client.read_holding_registers(register, 1, unit=UNIT).addCallback(functools.partial(self._on_done, register))
-        except StreamClosedError as ex:
-            log.exception(ex)
-        except Exception as ex:
-            log.exception(ex)
-
-    def _on_done(self, register, f):
-        log.debug('_on_done(%d)', register)
-        if isinstance(f, ReadHoldingRegistersResponse):
-            self._print(register, f.registers)
-        elif isinstance(f, AsyncErrorResponse):
-            log.error("AsyncErrorResponse error_code = %d", f.error_code)
-        else:
-            log.error("Unknown error: register: %s, f: %s", register, f)
-        log.debug('--- remove_timeout()')
-        IOLoop.current().remove_timeout(self._timeout_callback)
-        self._send_request()
-
-
 if __name__ == "__main__":
     IOLoop.configure('tornado.platform.epoll.EPollIOLoop')
 #   ModBusRunner('local', AsyncModbusTCPClient, [8, 10], host='127.0.0.1', port=5020)
-    ModBusRunner('tcp', AsyncModbusTCPClient, [149, 150, 257, 498, 499], host='192.168.1.151', port=502)
-    ModBusRunner120('serial', AsyncModbusSerialClient, [149, 150, 257, 498, 499], method='rtu', port='/dev/ttyUSB2', baudrate=19200, parity='E')
+    ModBusRunner('tcp', AsyncModbusTCPClient, [149, 150, 257, 498, 499], host='192.168.1.151', port=502, timeout=3)
+    ModBusRunner('serial', AsyncModbusSerialClient, [149, 150, 257, 498, 499], method='rtu', port='/dev/ttyUSB2', baudrate=19200, parity='E', timeout=3)
     IOLoop.instance().start()
