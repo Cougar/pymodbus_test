@@ -8,6 +8,8 @@ python3 -m venv .venv
 . .venv/bin/activate
 
 pip install --upgrade pip
-pip install pyserial==3.4 six==1.14.0 tornado==4.5.2 pymodbus==2.4.0
+pip install -r requirements.txt
 
 python3 test.py
+
+deactivate

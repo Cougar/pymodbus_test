@@ -59,8 +59,8 @@ class ModBusRunner:
             self._connect()
         except Exception as ex:
             log.error(ex)
-#       self._timeout_callback = IOLoop.current().call_later(self._timeout, self._on_timeout)
-#       log.debug('+++ timeout set: %s', self._timeout_callback)
+        self._timeout_callback = IOLoop.current().call_later(self._timeout, self._on_timeout)
+        log.debug('+++ timeout set: %s', self._timeout_callback)
 
     def _on_connect(self, future):
         log.debug('_on_connect()')
@@ -94,8 +94,8 @@ class ModBusRunner:
 #           return
         else:
             self._print(register, f.result())
-#       log.debug('--- remove_timeout()')
-#       IOLoop.current().remove_timeout(self._timeout_callback)
+        log.debug('--- remove_timeout()')
+        IOLoop.current().remove_timeout(self._timeout_callback)
         self._send_request()
 
     def _on_timeout(self):
@@ -129,6 +129,6 @@ class ModBusRunner:
 if __name__ == "__main__":
     IOLoop.configure('tornado.platform.epoll.EPollIOLoop')
 #   ModBusRunner('local', AsyncModbusTCPClient, [8, 10], host='127.0.0.1', port=5020)
-#   ModBusRunner('tcp', AsyncModbusTCPClient, [149, 150, 257, 498, 499], host='192.168.1.151', port=502, timeout=3)
+    ModBusRunner('tcp', AsyncModbusTCPClient, [149, 150, 257, 498, 499, 999], host='192.168.1.151', port=502, timeout=1)
     ModBusRunner('serial', AsyncModbusSerialClient, [149, 150, 257, 498, 499, 999], method='rtu', port='/dev/ttyUSB2', baudrate=19200, parity='E', timeout=10)
     IOLoop.instance().start()

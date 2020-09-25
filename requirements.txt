@@ -1,0 +1,4 @@
+six>=1.15.0
+pyserial==3.4
+tornado==4.5.2
+pymodbus==2.4.0
