@@ -46,12 +46,10 @@ class ModBusRunner:
         self._timeout_callback = None
         self._connect()
 
-    @stats_inc
     def _connect(self):
         self._event_loop, self._future = self._ModbusClient(schedulers.IO_LOOP, **self._kwargs)
         self._future.add_done_callback(self._on_connect)
 
-    @stats_inc
     def run(self):
         self._send_request()
 
@@ -74,7 +72,6 @@ class ModBusRunner:
         self._timeout_callback = IOLoop.current().call_later(self._timeout, self._on_timeout)
         log.debug('+++ timeout set: %s', self._timeout_callback)
 
-    @stats_inc
     def _on_connect(self, future):
         log.debug('_on_connect()')
         log.info("Client connected")
@@ -101,6 +98,7 @@ class ModBusRunner:
 
     @stats_inc
     def _on_done(self, register, f):
+        IOLoop.current().remove_timeout(self._timeout_callback)
         log.debug('_on_done(%d)', register)
         exc = f.exception()
         if exc:
@@ -108,8 +106,6 @@ class ModBusRunner:
 #           return
         else:
             self._print(register, f.result())
-        log.debug('--- remove_timeout()')
-        IOLoop.current().remove_timeout(self._timeout_callback)
         self._send_request()
 
     @stats_inc
@@ -117,7 +113,6 @@ class ModBusRunner:
         log.warning("%s: TIMEOUT reading registers (%s, %s)", self, self._client, self._protocol)
         self._send_request()
 
-    @stats_inc
     def _print(self, register, value):
         if isinstance(value, ExceptionResponse):
             log.error("ExceptionResponse: %s (%d)", value, register)
@@ -166,7 +161,7 @@ if __name__ == "__main__":
     runners = {}
     IOLoop.configure('tornado.platform.epoll.EPollIOLoop')
 #   ModBusRunner('local', AsyncModbusTCPClient, [8, 10], host='127.0.0.1', port=5020)
-    runners['tcp'] = ModBusRunner('tcp', AsyncModbusTCPClient, [149, 150, 257, 498, 499, 999], host='192.168.1.151', port=502, timeout=5)
+    runners['tcp'] = ModBusRunner('tcp', AsyncModbusTCPClient, [149, 150, 257, 498, 499, 999], host='10.0.0.13', port=502, timeout=1)
     runners['serial'] = ModBusRunner('serial', AsyncModbusSerialClient, [149, 150, 257, 498, 499, 999], method='rtu', port='/dev/ttyUSB2', baudrate=19200, parity='E', timeout=1)
 
     app = tornado.web.Application([
