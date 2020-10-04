@@ -4,6 +4,6 @@ docker run -ti --device /dev/ttyUSB2 python:3.6.2 bash
 
 Run script on contianer:
 
-git clone https://github.com/Cougar/pymodbus_test.git --recurse-submodules --branch=pymodbus_2.4.0
+git clone https://github.com/Cougar/pymodbus_test.git --recurse-submodules --branch=pymodbus_533
 cd pymodbus_test
 ./run.sh

@@ -10,8 +10,7 @@ import time
 from pymodbus.client.asynchronous import schedulers
 
 from pymodbus.client.asynchronous.tcp import AsyncModbusTCPClient
-#from pymodbus.client.asynchronous.serial import AsyncModbusSerialClient
-from pymodbus_async.client.asynchronous.serial import AsyncModbusSerialClient
+from pymodbus.client.asynchronous.serial import AsyncModbusSerialClient
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 from pymodbus.register_read_message import ReadHoldingRegistersResponse
@@ -64,7 +63,7 @@ class ModBusRunner:
         log.debug('_send_request(%d)', register)
         try:
             self._client.read_holding_registers(register, 1, unit=UNIT).add_done_callback(functools.partial(self._on_done, register))
-        except StreamClosedError as ex:
+        except (StreamClosedError, ModbusIOException) as ex:
             log.error(ex)
             self._connect()
         except Exception as ex:
