@@ -1,3 +1,0 @@
-[submodule "pymodbus_async.git"]
-	path = pymodbus_async.git
-	url = https://github.com/Cougar/pymodbus_async.git

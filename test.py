@@ -10,8 +10,7 @@ import time
 from pymodbus.client.asynchronous import schedulers
 
 from pymodbus.client.asynchronous.tcp import AsyncModbusTCPClient
-#from pymodbus.client.asynchronous.serial import AsyncModbusSerialClient
-from pymodbus_async.client.asynchronous.serial import AsyncModbusSerialClient
+from pymodbus.client.asynchronous.serial import AsyncModbusSerialClient
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 from pymodbus.register_read_message import ReadHoldingRegistersResponse
