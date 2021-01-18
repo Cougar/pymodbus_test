@@ -39,7 +39,6 @@ class ModBusRunner:
         self._ModbusClient = ModbusClient
         self._kwargs = kwargs
         self._client = None
-        self._protocol = None
         self._register = self._get_next_register(register_list)
         self._timeout = timeout
         self._timeout_callback = None
@@ -109,7 +108,7 @@ class ModBusRunner:
 
     @stats_inc
     def _on_timeout(self):
-        log.warning("%s: TIMEOUT reading registers (%s, %s)", self, self._client, self._protocol)
+        log.warning("%s: TIMEOUT reading registers (%s)", self, self._client)
         self._send_request()
 
     def _print(self, register, value):
@@ -137,8 +136,6 @@ class ModBusRunner:
         log.debug('__del__()')
         if self._client:
             self._client.close()
-        if self._protocol:
-            self._protocol.stop()
 
 class WebHandler(tornado.web.RequestHandler):
     def __init__(self, *args, **kwargs):
